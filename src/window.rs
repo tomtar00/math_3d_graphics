@@ -2,17 +2,18 @@ use glfw::*;
 
 pub struct Window {
     pub glfw: glfw::Glfw,
-    pub ptr: glfw::PWindow,
-    pub events: GlfwReceiver<(f64, glfw::WindowEvent)>,
+    pub ptr: glfw::Window,
+    pub events: std::sync::mpsc::Receiver<(f64, glfw::WindowEvent)>,
 }
 
 impl Window {
-    pub fn new(width: u32, height: u32) -> Window {
-        let mut glfw = glfw::init(glfw::fail_on_errors!()).unwrap();
+    pub fn new(width: u32, height: u32, title: &str) -> Window {
+        let mut glfw = glfw::init(glfw::FAIL_ON_ERRORS).unwrap();
         glfw.window_hint(glfw::WindowHint::ContextVersion(3, 3));
         glfw.window_hint(glfw::WindowHint::OpenGlProfile(
             glfw::OpenGlProfileHint::Core,
         ));
+        
         #[cfg(target_os = "macos")]
         glfw.window_hint(glfw::WindowHint::OpenGlForwardCompat(true));
     
@@ -20,14 +21,13 @@ impl Window {
             .create_window(
                 width,
                 height,
-                "3D Transformations",
+                title,
                 glfw::WindowMode::Windowed,
             )
             .expect("Failed to create GLFW window.");
     
         window.make_current();
-        window.set_key_polling(true);
-        window.set_framebuffer_size_polling(true);
+        window.set_all_polling(true);
 
         Window { glfw, ptr: window, events }
     }
