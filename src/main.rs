@@ -4,10 +4,10 @@ use imgui_glfw_rs::ImguiGLFW;
 
 mod buffers;
 mod math;
+mod mesh;
 mod shader;
 mod texture;
 mod window;
-mod mesh;
 
 fn main() {
     let (vertices, indices) = mesh::load_mesh("res/viking.obj");
@@ -72,12 +72,13 @@ fn main() {
         let mut transform = math::Transform::new();
         transform.position = glam::vec3(0.0, 0.5, 2.5);
         transform.rotation = glam::vec3(-90.0, 0.0, 270.0);
+        let mut fov = 60.0;
 
         let view = math::view_matrix(glam::vec3(0.0, 2.0, 5.0), glam::vec3(0.0, 0.0, 0.0));
 
         gl.enable(glow::DEPTH_TEST);
-
         gl.clear_color(0.2, 0.3, 0.3, 1.0);
+
         while !window.ptr.should_close() {
             gl.clear(glow::COLOR_BUFFER_BIT | glow::DEPTH_BUFFER_BIT);
             gl.viewport(0, 0, width, height);
@@ -86,7 +87,7 @@ fn main() {
             let ui = imgui_glfw.frame(&mut window.ptr, &mut imgui);
 
             ui.window(ImGui::im_str!("Transform"))
-                .size([300.0, 120.0], ImGui::Condition::FirstUseEver)
+                .size([600.0, 180.0], ImGui::Condition::FirstUseEver)
                 .build(|| {
                     ui.text(format!("Window: {}x{}", width, height));
                     ui.text(format!("FPS: {:.1}", fps));
@@ -94,6 +95,7 @@ fn main() {
                     let mut position = transform.position.to_array();
                     if ui
                         .drag_float3(ImGui::im_str!("Position"), &mut position)
+                        .speed(0.1)
                         .build()
                     {
                         transform.position = glam::Vec3::from(position);
@@ -102,35 +104,41 @@ fn main() {
                     let mut rotation = transform.rotation.to_array();
                     if ui
                         .drag_float3(ImGui::im_str!("Rotation"), &mut rotation)
+                        .speed(0.5)
                         .build()
                     {
                         transform.rotation = glam::Vec3::from(rotation);
                     }
 
                     let mut scale = transform.scale.to_array();
-                    if ui.drag_float3(ImGui::im_str!("Scale"), &mut scale).build() {
+                    if ui
+                        .drag_float3(ImGui::im_str!("Scale"), &mut scale)
+                        .speed(0.1)
+                        .build()
+                    {
                         transform.scale = glam::Vec3::from(scale);
                     }
+
+                    ui.separator();
+                    ui.slider_float(ImGui::im_str!("FOV"), &mut fov, 10.0, 180.0)
+                        .build();
                 });
 
             gl.use_program(Some(shader_program));
 
             let location = gl.get_uniform_location(shader_program, "model");
-            gl.uniform_matrix_4_f32_slice(
-                location.as_ref(),
-                false,
-                &math::model_matrix(&transform).to_cols_array(),
-            );
+            let model = math::model_matrix(&transform);
+            gl.uniform_matrix_4_f32_slice(location.as_ref(), false, &model.to_cols_array());
             let location = gl.get_uniform_location(shader_program, "view");
             gl.uniform_matrix_4_f32_slice(location.as_ref(), false, &view.to_cols_array());
-            let projection = math::projection_matrix(width, height);
             let location = gl.get_uniform_location(shader_program, "projection");
+            let projection = math::projection_matrix(fov, width, height);
             gl.uniform_matrix_4_f32_slice(location.as_ref(), false, &projection.to_cols_array());
 
             gl.bind_vertex_array(Some(vertex_array));
             gl.bind_texture(glow::TEXTURE_2D, Some(texture));
-            gl.draw_elements(glow::TRIANGLES, indices.len() as i32, glow::UNSIGNED_INT, 0);
 
+            gl.draw_elements(glow::TRIANGLES, indices.len() as i32, glow::UNSIGNED_INT, 0);
             imgui_glfw.draw(ui, &mut window.ptr);
 
             let error = gl.get_error();
@@ -139,7 +147,6 @@ fn main() {
             }
 
             window.swap_buffers();
-
             window.glfw.poll_events();
             for (_, event) in glfw::flush_messages(&window.events) {
                 imgui_glfw.handle_event(&mut imgui, &event);
