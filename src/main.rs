@@ -7,43 +7,16 @@ mod math;
 mod shader;
 mod texture;
 mod window;
+mod mesh;
 
 fn main() {
-    // create window
-
-    // vertex and index buffer for 3d cube
-    let vertices: [f32; 64] = [
-        // positions     // colors      // texture coords
-        0.5, -0.5, -0.5, 1.0, 0.0, 0.0, 1.0, 0.0, // bottom right
-        -0.5, -0.5, -0.5, 0.0, 1.0, 0.0, 0.0, 0.0, // bottom left
-        -0.5, 0.5, -0.5, 0.0, 0.0, 1.0, 0.0, 1.0, // top left
-        0.5, 0.5, -0.5, 1.0, 1.0, 0.0, 1.0, 1.0, // top right
-        0.5, -0.5, 0.5, 1.0, 0.0, 1.0, 1.0, 0.0, // bottom right
-        -0.5, -0.5, 0.5, 0.0, 1.0, 1.0, 0.0, 0.0, // bottom left
-        -0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.0, 1.0, // top left
-        0.5, 0.5, 0.5, 1.0, 1.0, 1.0, 1.0, 1.0, // top right
-    ];
-    let indices: [u32; 36] = [
-        // back face
-        0, 1, 2, 2, 3, 0, 
-        // front face
-        4, 5, 6, 6, 7, 4, 
-        // left face
-        5, 1, 2, 2, 6, 5, 
-        // right face
-        4, 0, 3, 3, 7, 4, 
-        // top face
-        7, 6, 2, 2, 3, 7, 
-        // bottom face
-        4, 5, 1, 1, 0, 4,
-    ];
+    let (vertices, indices) = mesh::load_mesh("res/viking.obj");
+    let texture_data = texture::load_texture("res/viking.png");
 
     let vertex_source = r#"#version 330 core
         layout (location = 0) in vec3 aPos;
-        layout (location = 1) in vec3 aColor;
-        layout (location = 2) in vec2 aTexCoord;
+        layout (location = 1) in vec2 aTexCoord;
 
-        out vec3 Color;
         out vec2 TexCoord;
 
         uniform mat4 model;
@@ -53,7 +26,6 @@ fn main() {
         void main()
         {
             gl_Position = projection * view * model * vec4(aPos, 1.0);
-            Color = aColor;
             TexCoord = aTexCoord;
         }"#;
 
@@ -66,7 +38,7 @@ fn main() {
 
         void main()
         {
-            FragColor = texture(ourTexture, TexCoord) * vec4(Color, 1.0);
+            FragColor = texture(ourTexture, TexCoord);
         }"#;
 
     let (mut width, mut height): (i32, i32) = (800, 600);
@@ -87,22 +59,20 @@ fn main() {
                 offset: 0,
             },
             buffers::BufferAttribute {
-                name: "aColor",
-                size: 3,
-                offset: 3,
-            },
-            buffers::BufferAttribute {
                 name: "aTexCoord",
                 size: 2,
-                offset: 6,
+                offset: 3,
             },
         ]);
         let vertex_array =
             buffers::create_vertex_array(&gl, &vertex_buffer, &index_buffer, &buffer_layout);
         let shader_program = shader::create_shader(&gl, vertex_source, fragment_source);
-        let texture = texture::create_texture(&gl, "res/crate.jpeg");
+        let texture = texture::create_texture(&gl, &texture_data);
 
         let mut transform = math::Transform::new();
+        transform.position = glam::vec3(0.0, 0.5, 2.5);
+        transform.rotation = glam::vec3(-90.0, 0.0, 270.0);
+
         let view = math::view_matrix(glam::vec3(0.0, 2.0, 5.0), glam::vec3(0.0, 0.0, 0.0));
 
         gl.enable(glow::DEPTH_TEST);
@@ -110,13 +80,16 @@ fn main() {
         gl.clear_color(0.2, 0.3, 0.3, 1.0);
         while !window.ptr.should_close() {
             gl.clear(glow::COLOR_BUFFER_BIT | glow::DEPTH_BUFFER_BIT);
+            gl.viewport(0, 0, width, height);
 
+            let fps = imgui.io().framerate;
             let ui = imgui_glfw.frame(&mut window.ptr, &mut imgui);
 
             ui.window(ImGui::im_str!("Transform"))
-                .size([300.0, 100.0], ImGui::Condition::FirstUseEver)
+                .size([300.0, 120.0], ImGui::Condition::FirstUseEver)
                 .build(|| {
                     ui.text(format!("Window: {}x{}", width, height));
+                    ui.text(format!("FPS: {:.1}", fps));
 
                     let mut position = transform.position.to_array();
                     if ui
@@ -156,13 +129,13 @@ fn main() {
 
             gl.bind_vertex_array(Some(vertex_array));
             gl.bind_texture(glow::TEXTURE_2D, Some(texture));
-            gl.draw_elements(glow::TRIANGLES, 36, glow::UNSIGNED_INT, 0);
+            gl.draw_elements(glow::TRIANGLES, indices.len() as i32, glow::UNSIGNED_INT, 0);
 
             imgui_glfw.draw(ui, &mut window.ptr);
 
             let error = gl.get_error();
             if error != glow::NO_ERROR {
-                panic!("GL error: {}", error);
+                println!("GL error: {}", error);
             }
 
             window.swap_buffers();

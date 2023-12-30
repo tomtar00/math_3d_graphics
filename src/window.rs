@@ -16,6 +16,8 @@ impl Window {
         
         #[cfg(target_os = "macos")]
         glfw.window_hint(glfw::WindowHint::OpenGlForwardCompat(true));
+        #[cfg(target_os = "macos")]
+        glfw.window_hint(glfw::WindowHint::CocoaRetinaFramebuffer(false));
     
         let (mut window, events) = glfw
             .create_window(
